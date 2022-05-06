@@ -1,0 +1,63 @@
+version: '3.9'
+services:
+
+  lcmaes:
+    build: 
+      context: .
+      dockerfile: dockerfiles/lcmaes.dockerfile
+    # resource limitations
+    deploy:
+      resources:
+        limits:
+          cpus: 16
+          memory: 16GB
+    # root access ?
+    privileged: true
+    volumes:
+      # volume share all machines but it is not accessible to outside world
+      - python_virtual_environment:/python_virtual_environment
+      # share current workdir in src directory
+      - ./:/src
+    # input point - shared folder
+    working_dir: /src
+
+  db:
+    image: mysql
+    command: --default-authentication-plugin=mysql_native_password
+    #restart: always
+    environment: 
+      MYSQL_ROOT_PASSWORD: example
+
+  dbadmin:
+    image: adminer
+    ports:
+      - 8080:8080
+
+volumes:
+  python_virtual_environment: 
+    external: false
+
+
+
+
+
+# old stuff:
+
+#redis-server:
+#  build:
+#    context: .
+#    dockerfile: dockerfiles/redis.dockerfile
+#  ports:
+#    - '6379:6379'
+#      #command: redis-server --save 20 1 --loglevel warning --requirepass af75642febdbc9e79210d76f5214f7243f646852
+#  command: redis-server --loglevel warning --requirepass af75642febdbc9e79210d76f5214f7243f646852
+#  volumes:
+#    - redis_database_folder:/data
+#
+#redis-cli:
+#  build:
+#    context: .
+#    dockerfile: dockerfiles/redis.dockerfile
+#  ports:
+#    - '6379:6379'
+#  command: redis-cli 
