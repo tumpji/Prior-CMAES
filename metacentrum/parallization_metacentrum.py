@@ -15,11 +15,6 @@ import pickle
 import sklearn.preprocessing
 from sklearn.model_selection import KFold, LeaveOneOut
 
-#import saver
-#import losses 
-
-
-
 
 class IsMetacentrum:
     '''
@@ -65,7 +60,7 @@ class IsMetacentrum:
                 return self.TORQUE_RESC_TOTAL_MEM / divide
             print('Warning memory is predicted ... no PBS_RESC_TOTAL_MEM or TORQUE_RESC_TOTAL_MEM found')
         return psutil.virtual_memory().total / divide
-
+    
     def __enter__(self):
         def initializer():
             import os
@@ -77,6 +72,19 @@ class IsMetacentrum:
  
     def __exit__(self, type, value, traceback):
         return self.pool.__exit__(type, value, traceback)
+    
+    
+    def run_imap_unordered(self, func, iterator):
+        with self as pool:
+            yield from pool.imap_unordered(func, iterator)
+            
+    def run_imap(self, func, iterator):
+        with self as pool:
+            yield from pool.imap(func, iterator)
+            
+    def run_map(self, func, iterator):
+        with self as pool:
+            return pool.map(func, iterator)
            
     
     
@@ -131,3 +139,72 @@ class ArrayIsMetacentrum(IsMetacentrum):
 
         with self as pool:
             yield from pool.imap_unordered(func, iterator)
+            
+            
+class ArrayMetacentrum(IsMetacentrum):
+    '''
+    Extends IsMetacentrum in order ot add 
+        a) isarray() -> bool
+        b) array_index
+        c) generator - splits iterator based on array index of specific job
+        
+        generator - 
+    '''
+    def __init__(self, *args, slice_type='interleave', seed=42, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.slice_type = slice_type
+        self.seed = seed
+    
+    @property
+    def isarray(self):
+        return hasattr(self, 'PBS_ARRAY_INDEX')
+    
+    @property
+    def array_index(self):
+        if self.isarray:
+            return self._get_all_array_indexes().index(self.PBS_ARRAY_INDEX)
+        return 0
+    
+    @functools.lru_cache()
+    def _get_all_array_indexes(self):
+        if self.isarray:
+            v = subprocess.run(['qstat', '-J', '-t', self.PBS_ARRAY_ID], capture_output=True).stdout.decode('utf-8')
+            v = re.findall(r'^\d+\[(\d+)\]', v, re.MULTILINE)
+            return list(sorted(map(int, v)))
+        return [1]
+    
+            
+    def split_work(self, iterator):
+        iterator = list(iterator)
+        alen = len(self._get_all_array_indexes())
+        index = self.array_index
+
+        if self.slice_type in ('offset', 'random'):
+            if self.slice_type == 'random':
+                cache_state = random.getstate()
+                random.seed(self.seed, version=2)
+                random.shuffle(iterator)
+                random.setstate(cache_state)
+            splits = list(reversed(np.array_split(np.array(iterator, dtype=object) , alen)))
+            iterator = list(splits[index])
+        elif self.slice_type in ('interleave',):
+            iterator = itertools.islice(iterator, index, None, alen)
+        else:
+            raise NotImplementedError('ArrayIsMetacentrum: slice_type is not implemented')
+        return iterator
+    
+    def split_work_and_run_imap_unordered(self, func, iterator):
+        # TODO - offset & random split is not effective !!!!
+        iterator = self.split_work(iterator)
+        yield from self.run_imap_unordered(func, iterator)
+            
+    def split_work_and_run_imap(self, func, iterator):
+        # TODO - offset & random split is not effective !!!!
+        iterator = self.split_work(iterator)
+        yield from self.run_imap(func, iterator)
+            
+    def split_work_and_run_map(self, func, iterator):
+        iterator = self.split_work(iterator)
+        return self.run_map(func, iterator)
+    
+    
