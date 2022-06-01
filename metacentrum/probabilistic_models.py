@@ -67,6 +67,10 @@ def get_information_double_distillation(model, x_test, y_test):
 @torch.no_grad()
 def extend_info(prefix, func, model, x_test, y_test):
     info = func(model, x_test, y_test)
+    
+    info['mean'] = np.squeeze(info['mean'])
+    y_test = np.squeeze(y_test)
+
     info['MSE'] = LossL1()(info['mean'], y_test)
     info['MAE'] = LossL2()(info['mean'], y_test)
     info['RDE'] = LossRDE_auto()(info['mean'], y_test)

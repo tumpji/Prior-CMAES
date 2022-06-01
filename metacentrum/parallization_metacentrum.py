@@ -179,12 +179,16 @@ class ArrayMetacentrum(IsMetacentrum):
         alen = len(self._get_all_array_indexes())
         index = self.array_index
 
-        if self.slice_type in ('offset', 'random'):
-            if self.slice_type == 'random':
-                cache_state = random.getstate()
-                random.seed(self.seed, version=2)
-                random.shuffle(iterator)
-                random.setstate(cache_state)
+        if self.slice_type == 'random':
+            #seed = self.slice_type[6:]
+            #seed = int(seed) if len(seed) else 42
+            cache_state = random.getstate()
+            random.seed(self.seed, version=2)
+            random.shuffle(iterator)
+            random.setstate(cache_state)
+            splits = list(reversed(np.array_split(np.array(iterator, dtype=object) , alen)))
+            iterator = list(splits[index])
+        elif self.slice_type == 'offset':
             splits = list(reversed(np.array_split(np.array(iterator, dtype=object) , alen)))
             iterator = list(splits[index])
         elif self.slice_type in ('interleave',):
